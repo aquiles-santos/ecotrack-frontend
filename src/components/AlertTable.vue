@@ -1,18 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { ref } from 'vue';
 
-import { CRITICALITY } from '@/types'
-
-const FILTERS = [
-  { value: 'all', label: 'Todos' },
-  { value: CRITICALITY.WITHIN_LIMIT, label: 'Dentro do limite' },
-  { value: CRITICALITY.ABOVE_LIMIT, label: 'Acima do limite' },
-]
-
-const CRITICALITY_LABEL = {
-  [CRITICALITY.WITHIN_LIMIT]: 'Dentro do limite',
-  [CRITICALITY.ABOVE_LIMIT]: 'Acima do limite',
-}
+import { CRITICALITY } from '@/types';
 
 const props = defineProps({
   /** @type {import('vue').PropType<import('@/types').Alert[]>} */
@@ -42,85 +31,106 @@ const props = defineProps({
     type: String,
     default: 'all',
   },
-})
+});
+
+const FILTERS = [
+  { value: 'all', label: 'Todos' },
+  { value: CRITICALITY.WITHIN_LIMIT, label: 'Dentro do limite' },
+  { value: CRITICALITY.ABOVE_LIMIT, label: 'Acima do limite' },
+];
+
+const CRITICALITY_LABEL = {
+  [CRITICALITY.WITHIN_LIMIT]: 'Dentro do limite',
+  [CRITICALITY.ABOVE_LIMIT]: 'Acima do limite',
+};
 
 const emit = defineEmits([
   'update:criticality',
   'update:skip',
   'edit',
   'delete',
-])
+]);
 
 /** @type {import('vue').Ref<import('@/types').Alert | null>} */
-const pendingDelete = ref(null)
+const pendingDelete = ref(null);
 
-const canGoBack = () => props.skip > 0
-const canGoForward = () => props.alerts.length >= props.limit
+const canGoBack = () => props.skip > 0;
+const canGoForward = () => props.alerts.length >= props.limit;
 
 /**
  * @param {string} value
  */
-function onFilter(value) {
-  emit('update:criticality', value)
-}
+const onFilter = (value) => {
+  emit('update:criticality', value);
+};
 
-function goBack() {
-  if (!canGoBack()) return
-  emit('update:skip', Math.max(0, props.skip - props.limit))
-}
+const goBack = () => {
+  if (!canGoBack()) return;
 
-function goForward() {
-  if (!canGoForward()) return
-  emit('update:skip', props.skip + props.limit)
-}
+  emit('update:skip', Math.max(0, props.skip - props.limit));
+};
+
+const goForward = () => {
+  if (!canGoForward()) return;
+
+  emit('update:skip', props.skip + props.limit);
+};
 
 /**
  * @param {import('@/types').Alert} alert
  */
-function askDelete(alert) {
-  pendingDelete.value = alert
-}
+const askDelete = (alert) => {
+  pendingDelete.value = alert;
+};
 
-function cancelDelete() {
-  pendingDelete.value = null
-}
+const cancelDelete = () => {
+  pendingDelete.value = null;
+};
 
-function confirmDelete() {
-  if (!pendingDelete.value) return
-  emit('delete', pendingDelete.value)
-  pendingDelete.value = null
-}
+const confirmDelete = () => {
+  if (!pendingDelete.value) return;
+
+  emit('delete', pendingDelete.value);
+
+  pendingDelete.value = null;
+};
 
 /**
  * @param {number} latitude
  * @param {number} longitude
  */
-function formatCoordinates(latitude, longitude) {
-  if (latitude == null || longitude == null) return '—'
-  return `${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}`
-}
+const formatCoordinates = (latitude, longitude) => {
+  if (latitude == null || longitude == null) return '—';
+
+  return `${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}`;
+};
 
 /**
  * @param {import('@/types').Alert} alert
  */
-function formatLatestReading(alert) {
-  const reading = alert.latest_reading
-  if (!reading) return 'sem leitura'
+const formatLatestReading = (alert) => {
+  const reading = alert.latest_reading;
+
+  if (!reading) return 'sem leitura';
+
   const fetched = reading.fetched_at
     ? new Intl.DateTimeFormat('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
       }).format(new Date(reading.fetched_at))
-    : null
-  const aqi = reading.aqi != null ? `AQI ${reading.aqi}` : null
-  return [aqi, fetched].filter(Boolean).join(' · ') || 'sem leitura'
-}
+    : null;
+
+  const aqi = reading.aqi != null ? `AQI ${reading.aqi}` : null;
+
+  return [aqi, fetched].filter(Boolean).join(' · ') || 'sem leitura';
+};
 </script>
 
 <template>
   <section class="rounded-2xl border border-emerald-200 bg-white shadow-sm">
     <header
-      class="flex flex-col gap-3 border-b border-emerald-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+      class="flex flex-col gap-3 border-b border-emerald-100 px-5 py-4
+        sm:flex-row sm:items-center sm:justify-between"
     >
       <h2 class="text-lg font-semibold text-emerald-950">Alertas</h2>
       <div
@@ -146,7 +156,11 @@ function formatLatestReading(alert) {
       </div>
     </header>
 
-    <div v-if="status === 'loading'" class="space-y-2 p-5" aria-busy="true">
+    <div
+      v-if="status === 'loading'"
+      class="space-y-2 p-5"
+      aria-busy="true"
+    >
       <div
         v-for="row in 4"
         :key="row"
@@ -156,7 +170,8 @@ function formatLatestReading(alert) {
 
     <p
       v-else-if="status === 'error'"
-      class="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-900"
+      class="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm
+        text-red-900"
     >
       {{ errorMessage || 'Não foi possível carregar os alertas.' }}
     </p>
@@ -168,7 +183,10 @@ function formatLatestReading(alert) {
       Nenhum alerta
     </p>
 
-    <div v-else class="overflow-x-auto">
+    <div
+      v-else
+      class="overflow-x-auto"
+    >
       <table class="min-w-full text-left text-sm">
         <thead class="bg-emerald-50 text-emerald-900">
           <tr>
@@ -228,13 +246,15 @@ function formatLatestReading(alert) {
 
     <footer
       v-if="status !== 'loading' && status !== 'error'"
-      class="flex items-center justify-between border-t border-emerald-100 px-5 py-3 text-sm"
+      class="flex items-center justify-between border-t border-emerald-100 px-5
+        py-3 text-sm"
     >
       <span class="text-stone-600">A partir de {{ skip }}</span>
       <div class="flex gap-2">
         <button
           type="button"
-          class="rounded-lg border border-emerald-200 px-3 py-1 disabled:cursor-not-allowed disabled:text-stone-400"
+          class="rounded-lg border border-emerald-200 px-3 py-1
+            disabled:cursor-not-allowed disabled:text-stone-400"
           :disabled="!canGoBack()"
           @click="goBack"
         >
@@ -242,7 +262,8 @@ function formatLatestReading(alert) {
         </button>
         <button
           type="button"
-          class="rounded-lg border border-emerald-200 px-3 py-1 disabled:cursor-not-allowed disabled:text-stone-400"
+          class="rounded-lg border border-emerald-200 px-3 py-1
+            disabled:cursor-not-allowed disabled:text-stone-400"
           :disabled="!canGoForward()"
           @click="goForward"
         >
@@ -253,7 +274,8 @@ function formatLatestReading(alert) {
 
     <div
       v-if="pendingDelete"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-emerald-950/40 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center
+        bg-emerald-950/40 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-alert-title"
@@ -279,7 +301,8 @@ function formatLatestReading(alert) {
           </button>
           <button
             type="button"
-            class="rounded-lg bg-red-700 px-3 py-2 text-sm font-medium text-white"
+            class="rounded-lg bg-red-700 px-3 py-2 text-sm font-medium
+              text-white"
             @click="confirmDelete"
           >
             Excluir
