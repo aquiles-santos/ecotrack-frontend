@@ -1,20 +1,43 @@
 <script setup>
-import { APP_NAME } from '@/types'
+import { APP_NAME } from '@/types';
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center bg-emerald-50 p-8">
-    <div class="max-w-lg text-center">
-      <p class="text-sm font-medium tracking-wide text-emerald-700 uppercase">
-        Monitoramento de qualidade do ar
-      </p>
-      <h1 class="mt-2 text-4xl font-semibold text-emerald-950">
-        {{ APP_NAME }}
-      </h1>
-      <p class="mt-4 text-emerald-800">
-        Interface em Vue 3. O dashboard e os alertas entram nas próximas
-        etapas.
-      </p>
-    </div>
-  </main>
+  <div class="min-h-screen bg-emerald-50 text-emerald-950">
+    <header class="border-b border-emerald-200 bg-white">
+      <div
+        class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4
+          py-4"
+      >
+        <routerLink
+          to="/"
+          class="text-xl font-semibold text-emerald-950"
+        >
+          {{ APP_NAME }}
+        </routerLink>
+        <nav
+          class="flex gap-2 text-sm font-medium"
+          aria-label="Principal"
+        >
+          <routerLink
+            to="/"
+            class="rounded-lg px-3 py-2 text-emerald-800"
+            exact-active-class="bg-emerald-800 text-white"
+          >
+            Dashboard
+          </routerLink>
+          <routerLink
+            to="/alerts"
+            class="rounded-lg px-3 py-2 text-emerald-800"
+            exact-active-class="bg-emerald-800 text-white"
+          >
+            Alertas
+          </routerLink>
+        </nav>
+      </div>
+    </header>
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <RouterView />
+    </main>
+  </div>
 </template>

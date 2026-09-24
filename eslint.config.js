@@ -1,7 +1,8 @@
-import js from '@eslint/js'
-import eslintConfigPrettier from 'eslint-config-prettier'
-import pluginVue from 'eslint-plugin-vue'
-import globals from 'globals'
+import js from '@eslint/js';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
+import pluginVue from 'eslint-plugin-vue';
+import globals from 'globals';
 
 export default [
   {
@@ -22,6 +23,9 @@ export default [
     },
     rules: {
       'vue/multi-word-component-names': 'off',
+      'prefer-arrow-callback': 'error',
+      curly: ['error', 'multi-line'],
     },
   },
-]
+  eslintPluginPrettierRecommended,
+];

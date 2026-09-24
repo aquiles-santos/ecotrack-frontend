@@ -1,5 +1,21 @@
 {
-  "semi": false,
+  "semi": true,
   "singleQuote": true,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "printWidth": 80,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "htmlWhitespaceSensitivity": "ignore",
+  "plugins": ["prettier-plugin-tailwindcss", "prettier-plugin-classnames"],
+  "tailwindStylesheet": "./src/assets/main.css",
+  "customFunctions": ["clsx", "cn"],
+  "endingPosition": "absolute",
+  "overrides": [
+    {
+      "files": "*.vue",
+      "options": {
+        "singleAttributePerLine": true
+      }
+    }
+  ]
 }

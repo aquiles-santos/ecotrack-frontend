@@ -1,17 +1,17 @@
-export const APP_NAME = 'EcoTrack'
+export const APP_NAME = 'EcoTrack';
 
 /** @typedef {'PM2.5' | 'PM10' | 'CO' | 'NO2' | 'O3'} TargetPollutant */
 
 export const TARGET_POLLUTANTS = Object.freeze(
   /** @type {const} */ (['PM2.5', 'PM10', 'CO', 'NO2', 'O3']),
-)
+);
 
 /** @typedef {'within_limit' | 'above_limit'} Criticality */
 
 export const CRITICALITY = Object.freeze({
   WITHIN_LIMIT: 'within_limit',
   ABOVE_LIMIT: 'above_limit',
-})
+});
 
 /** @typedef {'cache' | 'openweather' | 'unavailable_fallback'} AirQualitySource */
 
@@ -19,7 +19,7 @@ export const AIR_QUALITY_SOURCE = Object.freeze({
   CACHE: 'cache',
   OPENWEATHER: 'openweather',
   UNAVAILABLE_FALLBACK: 'unavailable_fallback',
-})
+});
 
 /**
  * Pollutant concentrations in µg/m³. Any field may be null.
