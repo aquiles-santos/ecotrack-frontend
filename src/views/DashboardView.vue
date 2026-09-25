@@ -4,7 +4,17 @@ import { RouterLink } from 'vue-router';
 
 import AirQualityCard from '@/components/AirQualityCard.vue';
 import PollutantChart from '@/components/PollutantChart.vue';
-import { ApiError, getAirQuality, listAlerts } from '@/services/api';
+import ButtonText from '@/components/ui/ButtonText.vue';
+import Dropdown from '@/components/ui/Dropdown.vue';
+import { useToast } from '@/composables/useToast';
+import {
+  ApiError,
+  getAirQuality,
+  getPollutants,
+  listAlerts,
+} from '@/services/api';
+
+const { fromApiError } = useToast();
 
 const DASHBOARD_ALERT_LIMIT = 100;
 
@@ -24,8 +34,33 @@ const reading = ref(null);
 const airError = ref(null);
 let airRequestSerial = 0;
 
+const POLLUTANT_ORDER = ['pm2_5', 'pm10', 'o3', 'no2', 'co'];
+
+/** @type {import('vue').Ref<import('@/types').PollutantGlossary | null>} */
+const glossary = ref(null);
+const glossaryStatus = ref(
+  /** @type {'loading' | 'ready' | 'error'} */ ('loading'),
+);
+const glossaryError = ref('');
+
+const glossaryItems = computed(() => {
+  if (!glossary.value) return [];
+
+  return POLLUTANT_ORDER.map((key) => ({
+    key,
+    ...glossary.value[key],
+  }));
+});
+
 const selectedAlert = computed(
   () => alerts.value.find((item) => item.id === selectedId.value) ?? null,
+);
+
+const alertOptions = computed(() =>
+  alerts.value.map((alert) => ({
+    value: alert.id,
+    label: `${alert.local_name} · ${alert.target_pollutant}`,
+  })),
 );
 
 const clearAirState = () => {
@@ -36,9 +71,8 @@ const clearAirState = () => {
 
 /**
  * @param {import('@/types').Alert[]} items
- * @param {boolean} [resetSelection]
  */
-const applyAlertList = (items, resetSelection = false) => {
+const applyAlertList = (items) => {
   alerts.value = items;
 
   if (items.length === 0) {
@@ -49,24 +83,48 @@ const applyAlertList = (items, resetSelection = false) => {
   }
 
   alertsStatus.value = 'ready';
+
   const stillSelected = items.some((item) => item.id === selectedId.value);
 
-  if (resetSelection || !stillSelected) {
-    selectedId.value = items[0].id;
+  if (!stillSelected) {
+    selectedId.value = '';
+    clearAirState();
   }
 };
 
-/**
- * @param {boolean} [resetSelection]
- */
-const loadAlerts = async (resetSelection = false) => {
+const loadGlossary = async () => {
+  glossaryStatus.value = 'loading';
+  glossaryError.value = '';
+
+  try {
+    glossary.value = await getPollutants();
+    glossaryStatus.value = 'ready';
+  } catch (error) {
+    glossaryStatus.value = 'error';
+    glossary.value = null;
+    glossaryError.value =
+      error instanceof Error
+        ? error.message
+        : 'Não foi possível carregar o significado dos poluentes.';
+    fromApiError(
+      error instanceof ApiError
+        ? error
+        : new ApiError({ message: glossaryError.value }),
+    );
+  }
+};
+
+const loadAlerts = async () => {
   alertsStatus.value = 'loading';
   alertsError.value = '';
 
   try {
-    const items = await listAlerts({ skip: 0, limit: DASHBOARD_ALERT_LIMIT });
+    const { items } = await listAlerts({
+      skip: 0,
+      limit: DASHBOARD_ALERT_LIMIT,
+    });
 
-    applyAlertList(items, resetSelection);
+    applyAlertList(items);
   } catch (error) {
     alertsStatus.value = 'error';
     alertsError.value =
@@ -98,14 +156,14 @@ const fetchAirQuality = async () => {
     cardStatus.value = 'ready';
 
     try {
-      const items = await listAlerts({
+      const { items } = await listAlerts({
         skip: 0,
         limit: DASHBOARD_ALERT_LIMIT,
       });
 
       if (serial !== airRequestSerial) return;
 
-      applyAlertList(items, false);
+      applyAlertList(items);
     } catch {
       // The reading already landed; listing cache/criticality can stay stale.
     }
@@ -117,79 +175,79 @@ const fetchAirQuality = async () => {
     airError.value =
       error instanceof ApiError
         ? error
-        : {
+        : new ApiError({
             message: 'Não foi possível consultar a qualidade do ar.',
-            status: null,
-          };
+          });
+    fromApiError(airError.value);
   }
 };
 
 watch(selectedId, (id, previous) => {
   if (id === previous) return;
 
-  airRequestSerial += 1;
-  clearAirState();
+  if (!id) {
+    airRequestSerial += 1;
+    clearAirState();
+    return;
+  }
+
+  fetchAirQuality();
 });
 
 onMounted(() => {
-  loadAlerts(true);
+  loadAlerts();
+  loadGlossary();
 });
 </script>
 
 <template>
   <div class="space-y-6">
-    <header
-      class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
-    >
-      <div>
-        <h1 class="text-2xl font-semibold text-emerald-950">Dashboard</h1>
-        <p class="mt-1 text-sm text-emerald-800">
-          Escolha um alerta e consulte a qualidade do ar sob demanda.
-        </p>
-      </div>
-      <button
-        type="button"
-        class="rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium
-          text-white disabled:cursor-not-allowed disabled:bg-stone-300"
-        :disabled="!selectedAlert || cardStatus === 'loading'"
-        @click="fetchAirQuality"
-      >
-        Consultar qualidade do ar
-      </button>
+    <header>
+      <h1 class="text-3xl font-semibold tracking-tight text-ink">Dashboard</h1>
+      <p class="mt-1 text-sm text-muted">
+        Escolha um alerta para consultar a qualidade do ar na hora.
+      </p>
     </header>
 
     <div
       v-if="alertsStatus === 'loading'"
-      class="h-20 animate-pulse rounded-2xl bg-white"
+      class="space-y-3"
       aria-busy="true"
-    />
+      aria-label="Carregando alertas do dashboard"
+    >
+      <div class="h-20 animate-pulse rounded-ui bg-surface" />
+      <div class="grid gap-6 lg:grid-cols-2">
+        <div class="h-72 animate-pulse rounded-ui bg-surface" />
+        <div class="h-72 animate-pulse rounded-ui bg-surface" />
+      </div>
+    </div>
 
     <p
       v-else-if="alertsStatus === 'error'"
-      class="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm
-        text-red-900"
+      class="rounded-ui border border-danger/30 bg-danger-soft px-4 py-4 text-sm
+        text-ink"
+      role="alert"
     >
       {{ alertsError }}
-      <button
-        type="button"
-        class="ml-2 underline"
-        @click="loadAlerts(true)"
+      <ButtonText
+        class="ml-2"
+        aria-label="Tentar carregar os alertas de novo"
+        @click="loadAlerts"
       >
         Tentar de novo
-      </button>
+      </ButtonText>
     </p>
 
     <section
       v-else-if="alertsStatus === 'empty'"
-      class="rounded-2xl border border-emerald-200 bg-white px-5 py-8
-        text-center shadow-sm"
+      class="panel px-5 py-8 text-center"
     >
-      <p class="text-emerald-950">Nenhum alerta cadastrado.</p>
-      <p class="mt-2 text-sm text-emerald-800">
+      <p class="text-ink">Nenhum alerta cadastrado.</p>
+      <p class="mt-2 text-sm text-muted">
         Cadastre um local em
         <RouterLink
           to="/alerts"
-          class="font-medium underline"
+          class="font-medium text-accent underline"
         >
           Alertas
         </RouterLink>
@@ -201,26 +259,17 @@ onMounted(() => {
       v-else
       class="space-y-6"
     >
-      <label class="block text-sm font-medium text-emerald-950">
-        Alerta
-        <select
-          v-model="selectedId"
-          class="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-3
-            py-2 sm:max-w-md"
-        >
-          <option
-            v-for="alert in alerts"
-            :key="alert.id"
-            :value="alert.id"
-          >
-            {{ alert.local_name }} · {{ alert.target_pollutant }}
-          </option>
-        </select>
-      </label>
+      <Dropdown
+        v-model="selectedId"
+        class="sm:max-w-md"
+        label="Alerta"
+        placeholder="Selecione um alerta"
+        :options="alertOptions"
+      />
 
       <p
         v-if="selectedAlert"
-        class="text-sm text-stone-600"
+        class="text-sm text-muted"
       >
         Coordenadas {{ selectedAlert.latitude }}, {{ selectedAlert.longitude }}.
         Criticidade: {{ selectedAlert.criticality ?? 'sem leitura ainda' }}.
@@ -233,8 +282,85 @@ onMounted(() => {
           :error="airError"
           @retry="fetchAirQuality"
         />
-        <PollutantChart :reading="cardStatus === 'ready' ? reading : null" />
+        <PollutantChart
+          :reading="cardStatus === 'ready' ? reading : null"
+          :loading="cardStatus === 'loading'"
+        />
       </div>
+
+      <section
+        class="panel p-5"
+        aria-labelledby="pollutant-meanings-title"
+      >
+        <h2
+          id="pollutant-meanings-title"
+          class="text-lg font-semibold text-ink"
+        >
+          O que cada poluente significa
+        </h2>
+        <p class="mt-1 text-sm text-muted">
+          Origem e impacto na saúde de cada poluente exibido acima (PM2.5, PM10,
+          CO, NO₂ e O₃).
+        </p>
+
+        <p
+          class="mt-3 rounded-ui border border-line bg-surface-muted px-4 py-3
+            text-sm text-muted"
+        >
+          A referência da OMS é o limite recomendado pela Organização Mundial da
+          Saúde (µg/m³) para exposição mais segura. Os valores nos cards são a
+          leitura do momento; as metas da OMS usam médias (24 h, 8 h ou ano). Um
+          valor pontual acima do teto diário não equivale a violar o limite
+          anual, e vice-versa.
+        </p>
+
+        <div
+          v-if="glossaryStatus === 'loading'"
+          class="mt-4 grid gap-4 sm:grid-cols-2"
+          aria-busy="true"
+          aria-label="Carregando significado dos poluentes"
+        >
+          <div
+            v-for="key in POLLUTANT_ORDER"
+            :key="key"
+            class="h-24 animate-pulse rounded-ui bg-surface-muted"
+          />
+        </div>
+
+        <p
+          v-else-if="glossaryStatus === 'error'"
+          class="mt-4 rounded-ui border border-danger/30 bg-danger-soft px-4
+            py-4 text-sm text-ink"
+          role="alert"
+        >
+          {{ glossaryError }}
+          <ButtonText
+            class="ml-2"
+            aria-label="Tentar carregar o significado dos poluentes de novo"
+            @click="loadGlossary"
+          >
+            Tentar de novo
+          </ButtonText>
+        </p>
+
+        <ul
+          v-else
+          class="mt-4 grid gap-4 sm:grid-cols-2"
+        >
+          <li
+            v-for="item in glossaryItems"
+            :key="item.key"
+            class="rounded-ui bg-surface-muted px-4 py-3"
+          >
+            <h3 class="text-sm font-semibold text-ink">
+              {{ item.name }}
+            </h3>
+            <p class="mt-1 text-sm text-muted">
+              {{ item.description }}
+            </p>
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>

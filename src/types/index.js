@@ -1,5 +1,10 @@
 export const APP_NAME = 'EcoTrack';
 
+/** Display version for the footer. Keep in sync with package.json. */
+export const APP_VERSION = '0.1.0';
+
+export const SUPPORT_EMAIL = 'contato@aquilessantos.dev';
+
 /** @typedef {'PM2.5' | 'PM10' | 'CO' | 'NO2' | 'O3'} TargetPollutant */
 
 export const TARGET_POLLUTANTS = Object.freeze(
@@ -81,12 +86,24 @@ export const AIR_QUALITY_SOURCE = Object.freeze({
  */
 
 /**
- * Query params for GET `/alerts`. Response is a bare array (no `total`).
+ * Query params for GET `/alerts`.
  *
  * @typedef {Object} AlertListParams
  * @property {number} [skip] Default 0
  * @property {number} [limit] Default 50, max 100
  * @property {Criticality} [criticality]
+ */
+
+/**
+ * GET `/alerts` page. `items` is empty when `skip` is past `total`.
+ *
+ * @typedef {Object} AlertListResponse
+ * @property {Alert[]} items
+ * @property {number} page 1-based, from `skip // limit + 1`
+ * @property {number} limit
+ * @property {number} total
+ * @property {number} total_pages
+ * @property {boolean} has_more
  */
 
 /**
@@ -101,6 +118,23 @@ export const AIR_QUALITY_SOURCE = Object.freeze({
  * @property {AirQualitySource} source
  * @property {string} fetched_at ISO-8601 timestamp
  * @property {boolean} stale
+ */
+
+/**
+ * One entry from GET `/pollutants`. Keys match `Pollutants`.
+ *
+ * @typedef {Object} PollutantMeaning
+ * @property {string} name
+ * @property {string} description
+ */
+
+/**
+ * @typedef {Object} PollutantGlossary
+ * @property {PollutantMeaning} pm2_5
+ * @property {PollutantMeaning} pm10
+ * @property {PollutantMeaning} co
+ * @property {PollutantMeaning} no2
+ * @property {PollutantMeaning} o3
  */
 
 /**

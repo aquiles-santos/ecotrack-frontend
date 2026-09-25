@@ -1,6 +1,13 @@
 <script setup>
-import { ref } from 'vue';
+import { nextTick, onUnmounted, ref, watch } from 'vue';
 
+import { Pencil, Trash2 } from '@lucide/vue';
+
+import ButtonOutline from '@/components/ui/ButtonOutline.vue';
+import ButtonStandard from '@/components/ui/ButtonStandard.vue';
+import ButtonText from '@/components/ui/ButtonText.vue';
+import Modal from '@/components/ui/Modal.vue';
+import Pagination from '@/components/ui/Pagination.vue';
 import { CRITICALITY } from '@/types';
 
 const props = defineProps({
@@ -19,19 +26,33 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  skip: {
+  page: {
     type: Number,
-    default: 0,
+    default: 1,
   },
   limit: {
     type: Number,
-    default: 50,
+    default: 10,
+  },
+  totalPages: {
+    type: Number,
+    default: 0,
   },
   criticality: {
     type: String,
     default: 'all',
   },
+  busy: {
+    type: Boolean,
+    default: false,
+  },
+  refreshing: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const SKELETON_ROWS = 4;
 
 const FILTERS = [
   { value: 'all', label: 'Todos' },
@@ -46,16 +67,24 @@ const CRITICALITY_LABEL = {
 
 const emit = defineEmits([
   'update:criticality',
-  'update:skip',
+  'update:page',
   'edit',
   'delete',
+  'retry',
 ]);
 
 /** @type {import('vue').Ref<import('@/types').Alert | null>} */
 const pendingDelete = ref(null);
+const cancelDeleteButton = ref(
+  /** @type {{ focus: () => void } | null} */ (null),
+);
+/** @type {Element | null} */
+let previousFocus = null;
 
-const canGoBack = () => props.skip > 0;
-const canGoForward = () => props.alerts.length >= props.limit;
+const emptyCopy = () =>
+  props.criticality === 'all'
+    ? 'Nenhum alerta cadastrado.'
+    : 'Nenhum alerta neste filtro.';
 
 /**
  * @param {string} value
@@ -64,36 +93,57 @@ const onFilter = (value) => {
   emit('update:criticality', value);
 };
 
-const goBack = () => {
-  if (!canGoBack()) return;
-
-  emit('update:skip', Math.max(0, props.skip - props.limit));
-};
-
-const goForward = () => {
-  if (!canGoForward()) return;
-
-  emit('update:skip', props.skip + props.limit);
-};
-
 /**
  * @param {import('@/types').Alert} alert
  */
 const askDelete = (alert) => {
+  if (props.busy) return;
+
+  previousFocus = document.activeElement;
   pendingDelete.value = alert;
 };
 
 const cancelDelete = () => {
   pendingDelete.value = null;
+
+  if (previousFocus instanceof HTMLElement) {
+    previousFocus.focus();
+  }
+
+  previousFocus = null;
 };
 
 const confirmDelete = () => {
-  if (!pendingDelete.value) return;
+  if (!pendingDelete.value || props.busy) return;
 
   emit('delete', pendingDelete.value);
-
-  pendingDelete.value = null;
+  cancelDelete();
 };
+
+/**
+ * @param {KeyboardEvent} event
+ */
+const onDeleteKeydown = (event) => {
+  if (event.key !== 'Escape' || !pendingDelete.value) return;
+
+  event.preventDefault();
+  cancelDelete();
+};
+
+watch(pendingDelete, async (alert) => {
+  window.removeEventListener('keydown', onDeleteKeydown);
+
+  if (!alert) return;
+
+  window.addEventListener('keydown', onDeleteKeydown);
+  await nextTick();
+  cancelDeleteButton.value?.focus();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onDeleteKeydown);
+  pendingDelete.value = null;
+});
 
 /**
  * @param {number} latitude
@@ -127,32 +177,29 @@ const formatLatestReading = (alert) => {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-emerald-200 bg-white shadow-sm">
+  <section class="panel">
     <header
-      class="flex flex-col gap-3 border-b border-emerald-100 px-5 py-4
-        sm:flex-row sm:items-center sm:justify-between"
+      class="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row
+        sm:items-center sm:justify-between"
     >
-      <h2 class="text-lg font-semibold text-emerald-950">Alertas</h2>
+      <h2 class="text-lg font-semibold text-ink">Alertas</h2>
       <div
         class="flex flex-wrap gap-2"
         role="group"
         aria-label="Filtrar criticidade"
       >
-        <button
+        <ButtonOutline
           v-for="filter in FILTERS"
           :key="filter.value"
-          type="button"
-          class="rounded-full px-3 py-1 text-sm"
-          :class="
-            criticality === filter.value
-              ? 'bg-emerald-800 text-white'
-              : 'bg-emerald-50 text-emerald-900'
-          "
+          size="sm"
+          class="rounded-ui"
+          :pressed="criticality === filter.value"
           :aria-pressed="criticality === filter.value"
+          :disabled="busy"
           @click="onFilter(filter.value)"
         >
           {{ filter.label }}
-        </button>
+        </ButtonOutline>
       </div>
     </header>
 
@@ -164,23 +211,43 @@ const formatLatestReading = (alert) => {
       <div
         v-for="row in 4"
         :key="row"
-        class="h-12 animate-pulse rounded-lg bg-emerald-50"
+        class="h-12 animate-pulse rounded-ui bg-surface-muted"
+      />
+    </div>
+
+    <div
+      v-else-if="status === 'error'"
+      class="m-5 rounded-ui border border-danger/30 bg-danger-soft px-4 py-4
+        text-sm text-ink"
+      role="alert"
+    >
+      <p>{{ errorMessage || 'Não foi possível carregar os alertas.' }}</p>
+      <ButtonStandard
+        class="mt-3"
+        @click="emit('retry')"
+      >
+        Tentar de novo
+      </ButtonStandard>
+    </div>
+
+    <div
+      v-else-if="refreshing"
+      class="space-y-2 p-5"
+      aria-busy="true"
+      aria-label="Atualizando alertas"
+    >
+      <div
+        v-for="row in SKELETON_ROWS"
+        :key="row"
+        class="h-12 animate-pulse rounded-ui bg-surface-muted"
       />
     </div>
 
     <p
-      v-else-if="status === 'error'"
-      class="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm
-        text-red-900"
-    >
-      {{ errorMessage || 'Não foi possível carregar os alertas.' }}
-    </p>
-
-    <p
       v-else-if="alerts.length === 0"
-      class="m-5 rounded-xl bg-emerald-50 px-4 py-6 text-sm text-emerald-800"
+      class="m-5 rounded-ui bg-surface-muted px-4 py-6 text-sm text-muted"
     >
-      Nenhum alerta
+      {{ emptyCopy() }}
     </p>
 
     <div
@@ -188,7 +255,7 @@ const formatLatestReading = (alert) => {
       class="overflow-x-auto"
     >
       <table class="min-w-full text-left text-sm">
-        <thead class="bg-emerald-50 text-emerald-900">
+        <thead class="bg-surface-muted text-muted">
           <tr>
             <th class="px-4 py-3 font-medium">Local</th>
             <th class="px-4 py-3 font-medium">Coordenadas</th>
@@ -203,10 +270,12 @@ const formatLatestReading = (alert) => {
           <tr
             v-for="alert in alerts"
             :key="alert.id"
-            class="border-t border-emerald-100"
+            class="border-t border-line transition-colors
+              duration-[var(--motion-fast)] ease-[var(--ease-standard)]
+              hover:bg-surface-muted"
           >
-            <td class="px-4 py-3 text-emerald-950">{{ alert.local_name }}</td>
-            <td class="px-4 py-3 text-stone-700">
+            <td class="px-4 py-3 text-ink">{{ alert.local_name }}</td>
+            <td class="px-4 py-3 text-muted">
               {{ formatCoordinates(alert.latitude, alert.longitude) }}
             </td>
             <td class="px-4 py-3">{{ alert.target_pollutant }}</td>
@@ -218,25 +287,36 @@ const formatLatestReading = (alert) => {
                   : 'Sem leitura'
               }}
             </td>
-            <td class="px-4 py-3 text-stone-700">
+            <td class="px-4 py-3 text-muted">
               {{ formatLatestReading(alert) }}
             </td>
             <td class="px-4 py-3">
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="rounded-lg px-2 py-1 text-emerald-800 underline"
+              <div class="flex gap-1">
+                <ButtonText
+                  size="icon"
+                  :disabled="busy"
+                  :aria-label="`Editar alerta ${alert.local_name}`"
+                  :title="`Editar ${alert.local_name}`"
                   @click="emit('edit', alert)"
                 >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg px-2 py-1 text-red-700 underline"
+                  <Pencil
+                    :size="16"
+                    aria-hidden="true"
+                  />
+                </ButtonText>
+                <ButtonText
+                  size="icon"
+                  tone="danger"
+                  :disabled="busy"
+                  :aria-label="`Excluir alerta ${alert.local_name}`"
+                  :title="`Excluir ${alert.local_name}`"
                   @click="askDelete(alert)"
                 >
-                  Excluir
-                </button>
+                  <Trash2
+                    :size="16"
+                    aria-hidden="true"
+                  />
+                </ButtonText>
               </div>
             </td>
           </tr>
@@ -245,70 +325,55 @@ const formatLatestReading = (alert) => {
     </div>
 
     <footer
-      v-if="status !== 'loading' && status !== 'error'"
-      class="flex items-center justify-between border-t border-emerald-100 px-5
-        py-3 text-sm"
+      v-if="status === 'ready' && !refreshing"
+      class="border-t border-line px-5 py-3"
     >
-      <span class="text-stone-600">A partir de {{ skip }}</span>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-emerald-200 px-3 py-1
-            disabled:cursor-not-allowed disabled:text-stone-400"
-          :disabled="!canGoBack()"
-          @click="goBack"
-        >
-          Anterior
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-emerald-200 px-3 py-1
-            disabled:cursor-not-allowed disabled:text-stone-400"
-          :disabled="!canGoForward()"
-          @click="goForward"
-        >
-          Próxima
-        </button>
-      </div>
+      <Pagination
+        :page="page"
+        :page-size="limit"
+        :item-count="alerts.length"
+        :total-pages="totalPages"
+        :disabled="busy"
+        @update:page="emit('update:page', $event)"
+      />
     </footer>
 
-    <div
-      v-if="pendingDelete"
-      class="fixed inset-0 z-50 flex items-center justify-center
-        bg-emerald-950/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-alert-title"
+    <Modal
+      :open="pendingDelete != null"
+      labelledby="delete-alert-title"
+      describedby="delete-alert-description"
+      @close="cancelDelete"
     >
-      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-lg">
-        <h3
-          id="delete-alert-title"
-          class="text-lg font-semibold text-emerald-950"
+      <h3
+        id="delete-alert-title"
+        class="text-lg font-semibold text-ink"
+      >
+        Excluir alerta
+      </h3>
+      <p
+        id="delete-alert-description"
+        class="mt-2 text-sm text-muted"
+      >
+        Excluir o alerta de {{ pendingDelete?.local_name }}? Essa ação não pode
+        ser desfeita.
+      </p>
+      <div class="mt-4 flex justify-end gap-2">
+        <ButtonText
+          ref="cancelDeleteButton"
+          tone="neutral"
+          @click="cancelDelete"
         >
-          Excluir alerta
-        </h3>
-        <p class="mt-2 text-sm text-stone-700">
-          Excluir o alerta de {{ pendingDelete.local_name }}? Essa ação não pode
-          ser desfeita.
-        </p>
-        <div class="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded-lg px-3 py-2 text-sm text-stone-700"
-            @click="cancelDelete"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-red-700 px-3 py-2 text-sm font-medium
-              text-white"
-            @click="confirmDelete"
-          >
-            Excluir
-          </button>
-        </div>
+          Cancelar
+        </ButtonText>
+        <ButtonStandard
+          tone="danger"
+          :disabled="busy"
+          :aria-label="`Confirmar exclusão de ${pendingDelete?.local_name}`"
+          @click="confirmDelete"
+        >
+          Excluir
+        </ButtonStandard>
       </div>
-    </div>
+    </Modal>
   </section>
 </template>
