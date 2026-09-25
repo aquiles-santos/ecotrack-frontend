@@ -200,7 +200,7 @@ http.interceptors.response.use(
 
 /**
  * @param {import('@/types').AlertListParams} [params]
- * @returns {Promise<import('@/types').Alert[]>}
+ * @returns {Promise<import('@/types').AlertListResponse>}
  */
 export const listAlerts = async (params = {}) => {
   const response = await http.get('/alerts', {
@@ -250,6 +250,17 @@ export const getAirQuality = async (lat, lon) => {
   const response = await http.get('/air-quality', {
     params: { lat, lon },
   });
+
+  return response.data;
+};
+
+/**
+ * Static glossary. Keys match `pollutants` on GET `/air-quality`.
+ *
+ * @returns {Promise<import('@/types').PollutantGlossary>}
+ */
+export const getPollutants = async () => {
+  const response = await http.get('/pollutants');
 
   return response.data;
 };

@@ -10,6 +10,7 @@ import {
 import { computed } from 'vue';
 import { Bar } from 'vue-chartjs';
 
+import { useTheme } from '@/composables/useTheme';
 import { AIR_QUALITY_SOURCE } from '@/types';
 
 const props = defineProps({
@@ -17,6 +18,10 @@ const props = defineProps({
   reading: {
     type: Object,
     default: null,
+  },
+  loading: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -30,7 +35,17 @@ const POLLUTANT_BARS = [
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-const chartOptions = {
+const { theme } = useTheme();
+
+const chartToken = (name) => {
+  theme.value;
+
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+};
+
+const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -48,15 +63,22 @@ const chartOptions = {
     },
   },
   scales: {
+    x: {
+      ticks: { color: chartToken('--chart-label') },
+      grid: { color: chartToken('--chart-grid') },
+    },
     y: {
       beginAtZero: true,
       title: {
         display: true,
         text: 'µg/m³',
+        color: chartToken('--chart-label'),
       },
+      ticks: { color: chartToken('--chart-label') },
+      grid: { color: chartToken('--chart-grid') },
     },
   },
-};
+}));
 
 const isFallback = computed(
   () => props.reading?.source === AIR_QUALITY_SOURCE.UNAVAILABLE_FALLBACK,
@@ -83,7 +105,9 @@ const chartData = computed(() => ({
       label: 'µg/m³',
       data: series.value,
       skipNull: true,
-      backgroundColor: ['#047857', '#0f766e', '#0369a1', '#4338ca', '#a16207'],
+      backgroundColor: [1, 2, 3, 4, 5].map((index) =>
+        chartToken(`--chart-${index}`),
+      ),
     },
   ],
 }));
@@ -101,13 +125,19 @@ const placeholderMessage = computed(() => {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-    <h2 class="text-lg font-semibold text-emerald-950">Poluentes</h2>
-    <p class="mt-1 text-sm text-emerald-800">
+  <section class="panel p-5">
+    <h2 class="text-lg font-semibold text-ink">Poluentes</h2>
+    <p class="mt-1 text-sm text-muted">
       Barras a partir da consulta à API EcoTrack. Valores nulos ficam em lacuna.
     </p>
     <div
-      v-if="shouldMountChart"
+      v-if="loading"
+      class="mt-4 h-72 animate-pulse rounded-ui bg-surface-muted"
+      aria-busy="true"
+      aria-label="Carregando gráfico de poluentes"
+    />
+    <div
+      v-else-if="shouldMountChart"
       class="mt-4 h-72"
     >
       <Bar
@@ -117,7 +147,7 @@ const placeholderMessage = computed(() => {
     </div>
     <p
       v-else
-      class="mt-4 rounded-xl bg-emerald-50 px-4 py-6 text-sm text-emerald-800"
+      class="mt-5 rounded-ui bg-surface-muted px-4 py-6 text-sm text-muted"
     >
       {{ placeholderMessage }}
     </p>

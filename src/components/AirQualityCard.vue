@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue';
+
+import ButtonStandard from '@/components/ui/ButtonStandard.vue';
 import { AIR_QUALITY_SOURCE } from '@/types';
 
 const props = defineProps({
@@ -72,9 +74,9 @@ const isFallback = computed(
 const aqiClass = computed(() => {
   const aqi = props.reading?.aqi;
 
-  if (aqi == null) return 'bg-stone-200 text-stone-600';
+  if (aqi == null) return 'bg-surface-muted text-muted';
 
-  return AQI_TONE[aqi] ?? 'bg-stone-200 text-stone-700';
+  return AQI_TONE[aqi] ?? 'bg-surface-muted text-ink';
 });
 
 const clearCountdown = () => {
@@ -145,20 +147,21 @@ onUnmounted(clearCountdown);
 
 <template>
   <section
-    class="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm"
+    class="panel p-5"
     aria-live="polite"
   >
     <header class="flex items-start justify-between gap-3">
       <div>
-        <h2 class="text-lg font-semibold text-emerald-950">Qualidade do ar</h2>
-        <p class="mt-1 text-sm text-emerald-800">
-          Cinco poluentes e índice de 1 a 5
+        <h2 class="text-lg font-semibold text-ink">Qualidade do ar</h2>
+        <p class="mt-1 text-sm text-muted">
+          O índice AQI (1 a 5) resume a situação geral do ar; abaixo, a
+          concentração de cada poluente em µg/m³.
         </p>
       </div>
       <span
         v-if="status === 'ready' && reading"
-        class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium
-          tracking-wide text-emerald-900 uppercase"
+        class="rounded-ui bg-accent-soft px-3 py-1 text-xs font-medium
+          tracking-wide text-ink uppercase"
       >
         {{ SOURCE_LABEL[reading.source] ?? reading.source }}
       </span>
@@ -169,25 +172,25 @@ onUnmounted(clearCountdown);
       class="mt-5 space-y-3"
       aria-busy="true"
     >
-      <div class="h-16 animate-pulse rounded-xl bg-emerald-100" />
+      <div class="h-16 animate-pulse rounded-ui bg-surface-muted" />
       <div
         v-for="row in POLLUTANT_ROWS"
         :key="row.key"
-        class="h-10 animate-pulse rounded-lg bg-emerald-50"
+        class="h-10 animate-pulse rounded-ui bg-surface-muted"
       />
     </div>
 
     <p
       v-else-if="status === 'empty'"
-      class="mt-5 rounded-xl bg-emerald-50 px-4 py-6 text-sm text-emerald-800"
+      class="mt-5 rounded-ui bg-surface-muted px-4 py-6 text-sm text-muted"
     >
       Nenhuma consulta de ar ainda. Escolha um alerta para ver a leitura.
     </p>
 
     <div
       v-else-if="status === 'error'"
-      class="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4
-        text-sm text-amber-950"
+      class="mt-5 rounded-ui border border-warning/30 bg-warning-soft px-4 py-4
+        text-sm text-warning-ink"
     >
       <p v-if="isRateLimited">
         Muitas consultas em pouco tempo.
@@ -199,15 +202,18 @@ onUnmounted(clearCountdown);
       <p v-else>
         {{ error?.message || 'Não foi possível carregar a qualidade do ar.' }}
       </p>
-      <button
-        type="button"
-        class="mt-3 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium
-          text-white disabled:cursor-not-allowed disabled:bg-stone-300"
+      <ButtonStandard
+        class="mt-3"
         :disabled="retryDisabled"
+        :aria-label="
+          isRateLimited
+            ? 'Tentar consultar qualidade do ar de novo'
+            : 'Tentar carregar qualidade do ar de novo'
+        "
         @click="emit('retry')"
       >
         Tentar de novo
-      </button>
+      </ButtonStandard>
     </div>
 
     <div
@@ -216,8 +222,8 @@ onUnmounted(clearCountdown);
     >
       <p
         v-if="isFallback"
-        class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm
-          text-amber-950"
+        class="rounded-ui border border-warning/30 bg-warning-soft px-4 py-3
+          text-sm text-warning-ink"
       >
         Indisponível temporário. A leitura não tem índice numérico neste
         momento.
@@ -228,54 +234,52 @@ onUnmounted(clearCountdown);
         class="flex items-center gap-4"
       >
         <span
-          class="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl
+          class="flex h-16 w-16 items-center justify-center rounded-ui text-2xl
             font-semibold"
           :class="aqiClass"
         >
           {{ reading.aqi }}
         </span>
         <div>
-          <p class="text-sm text-stone-500">Índice</p>
-          <p class="text-base font-medium text-emerald-950">
+          <p class="text-sm text-muted">Índice geral (AQI)</p>
+          <p class="text-base font-medium text-ink">
             {{ AQI_LABEL[reading.aqi] ?? 'Sem classificação' }}
           </p>
         </div>
       </div>
 
-      <dl class="mt-4 divide-y divide-emerald-100">
+      <dl class="mt-4 divide-y divide-line">
         <div
           v-for="row in POLLUTANT_ROWS"
           :key="row.key"
           class="flex items-center justify-between py-2 text-sm"
         >
-          <dt class="font-medium text-emerald-950">{{ row.label }}</dt>
-          <dd class="text-stone-700">
+          <dt class="font-medium text-ink">{{ row.label }}</dt>
+          <dd class="text-muted">
             {{ formatConcentration(reading.pollutants?.[row.key]) }}
           </dd>
         </div>
       </dl>
 
-      <footer
-        class="mt-4 flex flex-wrap items-center gap-3 text-xs text-stone-600"
-      >
+      <footer class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted">
         <span>Atualizado em {{ formatFetchedAt(reading.fetched_at) }}</span>
         <span
           v-if="reading.stale"
-          class="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-900"
+          class="rounded-ui bg-warning-soft px-2 py-1 font-medium
+            text-warning-ink"
         >
           Leitura desatualizada
         </span>
       </footer>
 
-      <button
+      <ButtonStandard
         v-if="isFallback"
-        type="button"
-        class="mt-4 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium
-          text-white"
+        class="mt-4"
+        aria-label="Tentar consultar qualidade do ar de novo"
         @click="emit('retry')"
       >
         Tentar de novo
-      </button>
+      </ButtonStandard>
     </div>
   </section>
 </template>

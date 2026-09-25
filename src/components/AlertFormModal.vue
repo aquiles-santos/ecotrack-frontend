@@ -1,6 +1,13 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 
+import { X } from '@lucide/vue';
+
+import ButtonStandard from '@/components/ui/ButtonStandard.vue';
+import ButtonText from '@/components/ui/ButtonText.vue';
+import Dropdown from '@/components/ui/Dropdown.vue';
+import Modal from '@/components/ui/Modal.vue';
+import TextField from '@/components/ui/TextField.vue';
 import { geocode } from '@/services/api';
 import { TARGET_POLLUTANTS } from '@/types';
 
@@ -48,6 +55,13 @@ const geocodeStatus = ref(
 );
 const searchError = ref('');
 const formError = ref('');
+const searchInput = ref(/** @type {{ focus: () => void } | null} */ (null));
+const pollutantOptions = TARGET_POLLUTANTS.map((pollutant) => ({
+  value: pollutant,
+  label: pollutant,
+}));
+/** @type {Element | null} */
+let previousFocus = null;
 
 const title = computed(() =>
   props.mode === 'edit' ? 'Editar alerta' : 'Novo alerta',
@@ -152,6 +166,12 @@ const selectCandidate = (candidate) => {
   searchError.value = '';
 };
 
+const requestClose = () => {
+  if (props.saving) return;
+
+  emit('close');
+};
+
 const onSubmit = () => {
   if (props.saving) return;
 
@@ -228,64 +248,89 @@ const onQueryChange = (value) => {
 
 watch(
   () => [props.open, props.mode, props.alert?.id],
-  () => {
+  async () => {
     if (!props.open) return;
 
     fillFromAlert(props.mode === 'edit' ? props.alert : null);
+    await nextTick();
+    searchInput.value?.focus();
   },
   { immediate: true },
 );
 
+/**
+ * @param {KeyboardEvent} event
+ */
+const onEscape = (event) => {
+  if (event.key !== 'Escape' || props.saving) return;
+
+  event.preventDefault();
+  requestClose();
+};
+
+watch(
+  () => props.open,
+  (open) => {
+    window.removeEventListener('keydown', onEscape);
+
+    if (open) {
+      previousFocus = document.activeElement;
+      window.addEventListener('keydown', onEscape);
+      return;
+    }
+
+    if (previousFocus instanceof HTMLElement) {
+      previousFocus.focus();
+    }
+
+    previousFocus = null;
+  },
+);
+
 watch(query, onQueryChange);
 
-onUnmounted(clearDebounce);
+onUnmounted(() => {
+  window.removeEventListener('keydown', onEscape);
+  clearDebounce();
+});
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-40 flex items-center justify-center bg-emerald-950/40
-      p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="alert-form-title"
+  <Modal
+    :open="open"
+    labelledby="alert-form-title"
+    @close="requestClose"
   >
-    <form
-      class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white
-        p-5 shadow-lg"
-      @submit.prevent="onSubmit"
-    >
+    <form @submit.prevent="onSubmit">
       <header class="flex items-start justify-between gap-3">
         <h2
           id="alert-form-title"
-          class="text-lg font-semibold text-emerald-950"
+          class="text-lg font-semibold text-ink"
         >
           {{ title }}
         </h2>
-        <button
-          type="button"
-          class="rounded-lg px-2 py-1 text-sm text-stone-600
-            disabled:cursor-not-allowed disabled:text-stone-400"
+        <ButtonText
+          tone="neutral"
           :disabled="saving"
-          @click="emit('close')"
+          aria-label="Fechar formulário de alerta"
+          @click="requestClose"
         >
-          Fechar
-        </button>
+          <X class="size-4" />
+        </ButtonText>
       </header>
 
-      <label class="mt-4 block text-sm font-medium text-emerald-950">
-        Busca de local
-        <input
-          v-model="query"
-          type="search"
-          maxlength="255"
-          autocomplete="off"
-          class="mt-1 w-full rounded-lg border border-emerald-200 px-3 py-2
-            disabled:cursor-not-allowed disabled:bg-stone-50"
-          placeholder="Nome da cidade"
-          :disabled="saving"
-        />
-      </label>
+      <TextField
+        ref="searchInput"
+        v-model="query"
+        class="mt-4"
+        label="Busca de local"
+        type="search"
+        maxlength="255"
+        autocomplete="off"
+        aria-label="Busca de local"
+        placeholder="Nome da cidade"
+        :disabled="saving"
+      />
 
       <div
         v-if="geocodeStatus === 'loading'"
@@ -295,51 +340,50 @@ onUnmounted(clearDebounce);
         <div
           v-for="row in 3"
           :key="row"
-          class="h-10 animate-pulse rounded-lg bg-emerald-50"
+          class="h-10 animate-pulse rounded-ui bg-surface-muted"
         />
       </div>
 
       <p
         v-else-if="geocodeStatus === 'unavailable'"
-        class="mt-3 rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-950"
+        class="mt-3 rounded-ui bg-warning-soft px-3 py-3 text-sm
+          text-warning-ink"
       >
         Serviço de locais indisponível.
-        <button
-          type="button"
-          class="ml-1 underline disabled:cursor-not-allowed"
+        <ButtonText
+          class="ml-1"
           :disabled="saving"
           @click="retrySearch"
         >
           Tentar de novo
-        </button>
+        </ButtonText>
       </p>
 
       <p
         v-else-if="geocodeStatus === 'empty'"
-        class="mt-3 rounded-lg bg-emerald-50 px-3 py-3 text-sm text-emerald-900"
+        class="mt-3 rounded-ui bg-surface-muted px-3 py-3 text-sm text-ink"
       >
-        Nenhum candidato
+        Nenhum candidato encontrado para essa busca.
       </p>
 
       <p
         v-else-if="geocodeStatus === 'error'"
-        class="mt-3 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-900"
+        class="mt-3 rounded-ui bg-danger-soft px-3 py-3 text-sm text-ink"
       >
         {{ searchError }}
-        <button
-          type="button"
-          class="ml-1 underline disabled:cursor-not-allowed"
+        <ButtonText
+          class="ml-1"
           :disabled="saving"
           @click="retrySearch"
         >
           Tentar de novo
-        </button>
+        </ButtonText>
       </p>
 
       <ul
         v-else-if="results.length > 0"
-        class="mt-3 divide-y divide-emerald-100 rounded-lg border
-          border-emerald-200"
+        class="mt-3 divide-y divide-line overflow-hidden rounded-ui border
+          border-line"
       >
         <li
           v-for="(candidate, index) in results"
@@ -347,8 +391,7 @@ onUnmounted(clearDebounce);
         >
           <button
             type="button"
-            class="w-full px-3 py-2 text-left text-sm hover:bg-emerald-50
-              disabled:cursor-not-allowed disabled:text-stone-400"
+            class="list-option px-3 py-2 text-sm disabled:text-muted"
             :disabled="saving"
             @click="selectCandidate(candidate)"
           >
@@ -362,102 +405,74 @@ onUnmounted(clearDebounce);
 
       <p
         v-if="searchError && geocodeStatus !== 'error'"
-        class="mt-2 text-sm text-red-700"
+        class="mt-2 text-sm text-danger"
       >
         {{ searchError }}
       </p>
 
-      <label class="mt-4 block text-sm font-medium text-emerald-950">
-        Nome do local
-        <input
-          :value="localName"
-          type="text"
-          readonly
-          class="mt-1 w-full rounded-lg border border-stone-200 bg-stone-50 px-3
-            py-2 text-stone-700"
-        />
-      </label>
+      <TextField
+        class="mt-4"
+        label="Nome do local"
+        :model-value="localName"
+        disabled
+      />
 
       <div class="mt-4 grid grid-cols-2 gap-3">
-        <label class="block text-sm font-medium text-emerald-950">
-          Latitude
-          <input
-            :value="latitude ?? ''"
-            type="text"
-            readonly
-            class="mt-1 w-full rounded-lg border border-stone-200 bg-stone-50
-              px-3 py-2 text-stone-700"
-          />
-        </label>
-        <label class="block text-sm font-medium text-emerald-950">
-          Longitude
-          <input
-            :value="longitude ?? ''"
-            type="text"
-            readonly
-            class="mt-1 w-full rounded-lg border border-stone-200 bg-stone-50
-              px-3 py-2 text-stone-700"
-          />
-        </label>
+        <TextField
+          label="Latitude"
+          :model-value="latitude ?? ''"
+          disabled
+        />
+        <TextField
+          label="Longitude"
+          :model-value="longitude ?? ''"
+          disabled
+        />
       </div>
 
-      <label class="mt-4 block text-sm font-medium text-emerald-950">
-        Poluente alvo
-        <select
-          v-model="targetPollutant"
-          class="mt-1 w-full rounded-lg border border-emerald-200 px-3 py-2
-            disabled:cursor-not-allowed disabled:bg-stone-50"
-          :disabled="saving"
-        >
-          <option
-            v-for="pollutant in TARGET_POLLUTANTS"
-            :key="pollutant"
-            :value="pollutant"
-          >
-            {{ pollutant }}
-          </option>
-        </select>
-      </label>
+      <Dropdown
+        v-model="targetPollutant"
+        class="mt-4"
+        label="Poluente alvo"
+        :options="pollutantOptions"
+        :disabled="saving"
+      />
 
-      <label class="mt-4 block text-sm font-medium text-emerald-950">
-        Limite de concentração
-        <input
-          v-model="concentrationLimit"
-          type="number"
-          min="0"
-          step="any"
-          class="mt-1 w-full rounded-lg border border-emerald-200 px-3 py-2
-            disabled:cursor-not-allowed disabled:bg-stone-50"
-          :disabled="saving"
-        />
-      </label>
+      <TextField
+        v-model="concentrationLimit"
+        class="mt-4"
+        label="Limite de concentração"
+        type="number"
+        min="0"
+        step="any"
+        :disabled="saving"
+      />
 
       <p
         v-if="formError"
-        class="mt-3 text-sm text-red-700"
+        class="mt-3 text-sm text-danger"
       >
         {{ formError }}
       </p>
 
       <div class="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-lg px-3 py-2 text-sm text-stone-700
-            disabled:cursor-not-allowed disabled:text-stone-400"
+        <ButtonText
+          tone="neutral"
           :disabled="saving"
-          @click="emit('close')"
+          @click="requestClose"
         >
           Cancelar
-        </button>
-        <button
+        </ButtonText>
+        <ButtonStandard
           type="submit"
-          class="rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium
-            text-white disabled:cursor-not-allowed disabled:bg-stone-300"
           :disabled="!canSubmit || saving"
+          :aria-label="
+            mode === 'edit' ? 'Salvar alterações do alerta' : 'Criar alerta'
+          "
         >
-          Salvar
-        </button>
+          {{ saving ? 'Salvando...' : 'Salvar' }}
+        </ButtonStandard>
       </div>
     </form>
-  </div>
+  </Modal>
 </template>

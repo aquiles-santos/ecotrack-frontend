@@ -1,65 +1,128 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import AlertFormModal from '@/components/AlertFormModal.vue';
 import AlertTable from '@/components/AlertTable.vue';
+import ButtonStandard from '@/components/ui/ButtonStandard.vue';
+import { useToast } from '@/composables/useToast';
 import {
+  ApiError,
   createAlert,
   deleteAlert,
   listAlerts,
   updateAlert,
 } from '@/services/api';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
+const { success, fromApiError } = useToast();
+const route = useRoute();
+const router = useRouter();
 
 /** @type {import('vue').Ref<import('@/types').Alert[]>} */
 const alerts = ref([]);
+const totalPages = ref(0);
 const status = ref(
   /** @type {'loading' | 'error' | 'empty' | 'ready'} */ ('loading'),
 );
 const errorMessage = ref('');
-const actionError = ref('');
-const skip = ref(0);
 const criticality = ref('all');
 const modalOpen = ref(false);
 const modalMode = ref(/** @type {'create' | 'edit'} */ ('create'));
 /** @type {import('vue').Ref<import('@/types').Alert | null>} */
 const editingAlert = ref(null);
 const saving = ref(false);
+const deleting = ref(false);
+const refreshing = ref(false);
+
+const MIN_REFRESH_MS = 280;
+
+/**
+ * @param {import('vue-router').LocationQuery} query
+ */
+const pageFromQuery = (query) => {
+  const raw = Array.isArray(query.page) ? query.page[0] : query.page;
+  const parsed = Number(raw);
+
+  if (!Number.isInteger(parsed) || parsed < 1) return 1;
+
+  return parsed;
+};
+
+const page = computed(() => pageFromQuery(route.query));
+
+/**
+ * @param {number} nextPage
+ */
+const goToPage = (nextPage) => {
+  const safe = Math.max(1, nextPage);
+  const query = { ...route.query };
+
+  if (safe === 1) {
+    delete query.page;
+  } else {
+    query.page = String(safe);
+  }
+
+  router.replace({ query });
+};
 
 const loadAlerts = async () => {
-  status.value = 'loading';
+  const isRefresh = status.value === 'ready' || status.value === 'empty';
+
+  if (isRefresh) {
+    refreshing.value = true;
+  } else {
+    status.value = 'loading';
+  }
+
   errorMessage.value = '';
+  const startedAt = Date.now();
 
   try {
     /** @type {import('@/types').AlertListParams} */
-    const params = { skip: skip.value, limit: PAGE_SIZE };
+    const params = {
+      skip: (page.value - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+    };
 
     if (criticality.value !== 'all') {
       params.criticality = criticality.value;
     }
 
-    const items = await listAlerts(params);
+    const result = await listAlerts(params);
 
-    alerts.value = items;
+    alerts.value = result.items;
+    totalPages.value = result.total_pages;
 
-    if (items.length === 0 && skip.value > 0) {
-      skip.value = Math.max(0, skip.value - PAGE_SIZE);
+    if (result.items.length === 0 && page.value > 1) {
+      goToPage(page.value - 1);
       return;
     }
 
-    status.value = items.length === 0 ? 'empty' : 'ready';
+    status.value = result.items.length === 0 ? 'empty' : 'ready';
   } catch (error) {
     status.value = 'error';
     errorMessage.value =
-      error instanceof Error
+      error instanceof ApiError
         ? error.message
         : 'Não foi possível carregar os alertas.';
+  } finally {
+    if (refreshing.value) {
+      const wait = MIN_REFRESH_MS - (Date.now() - startedAt);
+
+      if (wait > 0) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, wait);
+        });
+      }
+
+      refreshing.value = false;
+    }
   }
 };
 
 const openCreate = () => {
-  actionError.value = '';
   modalMode.value = 'create';
   editingAlert.value = null;
   modalOpen.value = true;
@@ -69,7 +132,6 @@ const openCreate = () => {
  * @param {import('@/types').Alert} alert
  */
 const openEdit = (alert) => {
-  actionError.value = '';
   modalMode.value = 'edit';
   editingAlert.value = alert;
   modalOpen.value = true;
@@ -85,24 +147,22 @@ const closeModal = () => {
  * @param {{ mode: 'create' | 'edit', id: string | null, payload: import('@/types').AlertCreate }} event
  */
 const onSubmit = async (event) => {
-  actionError.value = '';
   saving.value = true;
 
   try {
     if (event.mode === 'create') {
       await createAlert(event.payload);
+      success('Alerta criado.');
     } else if (event.id) {
       await updateAlert(event.id, event.payload);
+      success('Alerta atualizado.');
     }
 
     modalOpen.value = false;
 
     await loadAlerts();
   } catch (error) {
-    actionError.value =
-      error instanceof Error
-        ? error.message
-        : 'Não foi possível salvar o alerta.';
+    fromApiError(error);
   } finally {
     saving.value = false;
   }
@@ -112,17 +172,19 @@ const onSubmit = async (event) => {
  * @param {import('@/types').Alert} alert
  */
 const onDelete = async (alert) => {
-  actionError.value = '';
+  if (deleting.value) return;
+
+  deleting.value = true;
 
   try {
     await deleteAlert(alert.id);
+    success('Alerta excluído.');
 
     await loadAlerts();
   } catch (error) {
-    actionError.value =
-      error instanceof Error
-        ? error.message
-        : 'Não foi possível excluir o alerta.';
+    fromApiError(error);
+  } finally {
+    deleting.value = false;
   }
 };
 
@@ -130,11 +192,12 @@ const onDelete = async (alert) => {
  * @param {string} value
  */
 const onCriticality = (value) => {
-  skip.value = 0;
   criticality.value = value;
+
+  if (page.value !== 1) goToPage(1);
 };
 
-watch([skip, criticality], loadAlerts, { immediate: true });
+watch([page, criticality], loadAlerts, { immediate: true });
 </script>
 
 <template>
@@ -143,41 +206,34 @@ watch([skip, criticality], loadAlerts, { immediate: true });
       class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h1 class="text-2xl font-semibold text-emerald-950">Alertas</h1>
-        <p class="mt-1 text-sm text-emerald-800">
-          Cadastro com GET, POST, PUT e DELETE em /alerts. Coordenadas só pelo
-          geocode.
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Alertas</h1>
+        <p class="mt-1 text-sm text-muted">
+          Controle e personalização de seus alertas ambientais geolocalizados.
         </p>
       </div>
-      <button
-        type="button"
-        class="rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium
-          text-white"
+      <ButtonStandard
+        aria-label="Criar novo alerta"
         @click="openCreate"
       >
         Novo alerta
-      </button>
+      </ButtonStandard>
     </header>
-
-    <p
-      v-if="actionError"
-      class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm
-        text-red-900"
-    >
-      {{ actionError }}
-    </p>
 
     <AlertTable
       :alerts="alerts"
       :status="status"
       :error-message="errorMessage"
-      :skip="skip"
+      :page="page"
       :limit="PAGE_SIZE"
+      :total-pages="totalPages"
       :criticality="criticality"
+      :refreshing="refreshing"
+      :busy="saving || deleting || refreshing"
       @update:criticality="onCriticality"
-      @update:skip="skip = $event"
+      @update:page="goToPage"
       @edit="openEdit"
       @delete="onDelete"
+      @retry="loadAlerts"
     />
 
     <AlertFormModal
