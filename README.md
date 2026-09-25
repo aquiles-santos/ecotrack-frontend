@@ -4,6 +4,8 @@ Interface do **EcoTrack** — monitoramento de qualidade do ar (PM2.5, PM10, CO,
 
 O browser fala somente com esta aplicação. Qualidade do ar e geocodificação passam pela API em `ecotrack-backend`. Nenhuma chamada sai do navegador para a OpenWeather ou para a Open-Meteo, e nenhuma chave de API fica neste repositório.
 
+**Como executar:** passo a passo completo em [docs/COMO_EXECUTAR.md](docs/COMO_EXECUTAR.md) (Docker, desenvolvimento local e primeiro uso na UI).
+
 ## Stack
 
 | Camada    | Tecnologia                                      |
@@ -22,13 +24,18 @@ O browser fala somente com esta aplicação. Qualidade do ar e geocodificação 
 
 ## Instalação e desenvolvimento
 
+Modo **desenvolvimento** (Vite + API no Docker). Detalhes, URLs e troubleshooting: [docs/COMO_EXECUTAR.md](docs/COMO_EXECUTAR.md#caminho-b--desenvolvimento-vite--api-no-docker).
+
+1. No `ecotrack-backend`: `cp .env.example .env`, defina `OPENWEATHER_API_KEY` e rode `docker compose up --build` (terminal 1).
+2. Neste repositório (terminal 2):
+
 ```bash
 cp .env.example .env
 npm install
 npm run dev
 ```
 
-A UI sobe em http://localhost:5173. O Vite encaminha `/api` para `http://127.0.0.1:8000`, então a API precisa estar no ar (compose do backend, ou só `ecotrack-db` + `ecotrack-api`).
+A UI sobe em http://localhost:5173. O Vite encaminha `/api` para `http://127.0.0.1:8000`.
 
 | Comando            | Uso                          |
 | ------------------ | ---------------------------- |
@@ -42,7 +49,9 @@ A UI sobe em http://localhost:5173. O Vite encaminha `/api` para `http://127.0.0
 
 ## Docker Compose (stack completa)
 
-Este compose sobe os três serviços: `ecotrack-db`, `ecotrack-api` e `ecotrack-ui`. O build da API usa `../ecotrack-backend`. A chave `OPENWEATHER_API_KEY` é lida de `../ecotrack-backend/.env` e não é copiada para cá.
+Use este compose para **demo e entrega do MVP** (UI + API + banco em um comando). Passo a passo: [docs/COMO_EXECUTAR.md](docs/COMO_EXECUTAR.md#caminho-a--stack-completa-com-docker-recomendado).
+
+Resumo:
 
 ```bash
 # no ecotrack-backend, uma vez:
@@ -54,12 +63,13 @@ docker compose up --build
 ```
 
 - UI: http://localhost:8080
-- Alertas (rota do SPA, sem 404 do Nginx): http://localhost:8080/alerts
+- Alertas: http://localhost:8080/alerts
 - API via proxy: http://localhost:8080/api/v1/alerts
-- API direta: http://localhost:8000/docs
-- PostgreSQL: `localhost:5432` (usuário, senha e banco: `ecotrack`)
+- Swagger: http://localhost:8000/docs
 
-Não suba este compose junto com o do backend. Os dois publicam as portas **5432** e **8000** e usam os mesmos `container_name`. O caminho completo é só este arquivo, com os repositórios irmãos.
+Para parar: `docker compose down`.
+
+O compose do `ecotrack-backend` sobe só API + banco (útil no Caminho B). **Não suba os dois composes ao mesmo tempo** — conflitam nas portas **5432** e **8000**.
 
 ## Rotas consumidas
 
@@ -73,6 +83,7 @@ Todas relativas a `/api/v1`. No container, o Nginx preserva esse prefixo ao enca
 | `DELETE` | `/alerts/{id}`          | Excluir alerta (204, sem corpo)           |
 | `GET`    | `/air-quality`          | Card e gráfico do dashboard               |
 | `GET`    | `/geocode`              | Busca de local no formulário de alerta    |
+| `GET`    | `/pollutants`           | Glossário dos poluentes no dashboard      |
 
 ## APIs externas
 
