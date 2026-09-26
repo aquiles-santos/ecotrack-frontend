@@ -4,7 +4,7 @@ Passo a passo para subir a aplicação e acessar a UI. A API vive no repositóri
 
 ## Pré-requisitos
 
-- **Docker** com Compose (Caminho A — recomendado para demo e entrega)
+- **Docker** com Compose (Caminho A — recomendado para demo)
 - **Node.js 22+** (Caminho B — desenvolvimento com hot reload)
 - Repositórios irmãos na mesma pasta:
 
